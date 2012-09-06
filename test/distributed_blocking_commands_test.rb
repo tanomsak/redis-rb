@@ -1,53 +1,46 @@
 # encoding: UTF-8
 
-require File.expand_path("./helper", File.dirname(__FILE__))
-require "redis/distributed"
+require "helper"
+require "lint/blocking_commands"
 
-setup do
-  log = StringIO.new
-  init Redis::Distributed.new(NODES, :logger => ::Logger.new(log))
-end
+class TestDistributedBlockingCommands < Test::Unit::TestCase
 
-test "BLPOP" do |r|
-  r.lpush("foo", "s1")
-  r.lpush("foo", "s2")
+  include Helper::Distributed
+  include Lint::BlockingCommands
 
-  wire = Wire.new do
-    redis = Redis::Distributed.new(NODES)
-    Wire.sleep 0.3
-    redis.lpush("foo", "s3")
+  def test_blpop_raises
+    assert_raises(Redis::Distributed::CannotDistribute) do
+      r.blpop(["foo", "bar"])
+    end
   end
 
-  assert ["foo", "s2"] == r.blpop("foo", :timeout => 1)
-  assert ["foo", "s1"] == r.blpop("foo", :timeout => 1)
-  assert ["foo", "s3"] == r.blpop("foo", :timeout => 1)
-
-  wire.join
-end
-
-test "BRPOP" do |r|
-  r.rpush("foo", "s1")
-  r.rpush("foo", "s2")
-
-  wire = Wire.new do
-    redis = Redis::Distributed.new(NODES)
-    Wire.sleep 0.3
-    redis.rpush("foo", "s3")
+  def test_blpop_raises_with_old_prototype
+    assert_raises(Redis::Distributed::CannotDistribute) do
+      r.blpop("foo", "bar", 0)
+    end
   end
 
-  assert ["foo", "s2"] == r.brpop("foo", :timeout => 1)
-  assert ["foo", "s1"] == r.brpop("foo", :timeout => 1)
-  assert ["foo", "s3"] == r.brpop("foo", :timeout => 1)
+  def test_brpop_raises
+    assert_raises(Redis::Distributed::CannotDistribute) do
+      r.brpop(["foo", "bar"])
+    end
+  end
 
-  wire.join
-end
+  def test_brpop_raises_with_old_prototype
+    assert_raises(Redis::Distributed::CannotDistribute) do
+      r.brpop("foo", "bar", 0)
+    end
+  end
 
-test "BRPOP should unset a configured socket timeout" do |r|
-  r = Redis::Distributed.new(NODES, :timeout => 1)
+  def test_brpoplpush_raises
+    assert_raises(Redis::Distributed::CannotDistribute) do
+      r.brpoplpush("foo", "bar")
+    end
+  end
 
-  assert_nothing_raised do
-    r.brpop("foo", :timeout => 2)
-  end # Errno::EAGAIN raised if socket times out before redis command times out
-
-  assert r.nodes.all? { |node| node.client.timeout == 1 }
+  def test_brpoplpush_raises_with_old_prototype
+    assert_raises(Redis::Distributed::CannotDistribute) do
+      r.brpoplpush("foo", "bar", 0)
+    end
+  end
 end

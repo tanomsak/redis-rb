@@ -11,11 +11,12 @@ Gem::Specification.new do |s|
 
   s.homepage = "https://github.com/redis/redis-rb"
 
-  s.summary = "A Ruby client library for the Redis key-value store."
+  s.summary = "A Ruby client library for Redis"
 
   s.description = <<-EOS
-    A simple Ruby client trying to match Redis' API one-to-one while still providing a Rubystic interface.
-    It features thread safety, client-side sharding, and an obsession for performance.
+    A Ruby client that tries to match Redis' API one-to-one, while still
+    providing an idiomatic interface. It features thread-safety,
+    client-side sharding, pipelining, and an obsession for performance.
   EOS
 
   s.authors = [
@@ -37,5 +38,4 @@ Gem::Specification.new do |s|
   s.executables   = `git ls-files -- bin/*`.split("\n").map{ |f| File.basename(f) }
 
   s.add_development_dependency("rake")
-  s.add_development_dependency("cutest")
 end

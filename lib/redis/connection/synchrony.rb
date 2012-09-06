@@ -27,13 +27,18 @@ class Redis
       def receive_data(data)
         @reader.feed(data)
 
-        begin
-          until (reply = @reader.gets) == false
-            reply = CommandError.new(reply.message) if reply.is_a?(RuntimeError)
-            @req.succeed [:reply, reply]
+        loop do
+          begin
+            reply = @reader.gets
+          rescue RuntimeError => err
+            @req.fail [:error, ProtocolError.new(err.message)]
+            break
           end
-        rescue RuntimeError => err
-          @req.fail [:error, ProtocolError.new(err.message)]
+
+          break if reply == false
+
+          reply = CommandError.new(reply.message) if reply.is_a?(RuntimeError)
+          @req.succeed [:reply, reply]
         end
       end
 
@@ -60,9 +65,28 @@ class Redis
     class Synchrony
       include Redis::Connection::CommandHelper
 
-      def initialize
-        @timeout = 5.0
-        @connection = nil
+      def self.connect(config)
+        if config[:scheme] == "unix"
+          conn = EventMachine.connect_unix_domain(config[:path], RedisClient)
+        else
+          conn = EventMachine.connect(config[:host], config[:port], RedisClient) do |c|
+            c.pending_connect_timeout = [config[:timeout], 0.1].max
+          end
+        end
+
+        fiber = Fiber.current
+        conn.callback { fiber.resume }
+        conn.errback { fiber.resume :refused }
+
+        raise Errno::ECONNREFUSED if Fiber.yield == :refused
+
+        instance = new(conn)
+        instance.timeout = config[:timeout]
+        instance
+      end
+
+      def initialize(connection)
+        @connection = connection
       end
 
       def connected?
@@ -71,19 +95,6 @@ class Redis
 
       def timeout=(timeout)
         @timeout = timeout
-      end
-
-      def connect(uri, timeout)
-        conn = EventMachine.connect(uri.host, uri.port, RedisClient) do |c|
-          c.pending_connect_timeout = [timeout, 0.1].max
-        end
-
-        setup_connect_callbacks(conn, Fiber.current)
-      end
-
-      def connect_unix(path, timeout)
-        conn = EventMachine.connect_unix_domain(path, RedisClient)
-        setup_connect_callbacks(conn, Fiber.current)
       end
 
       def disconnect
@@ -105,24 +116,6 @@ class Redis
         else
           raise "Unknown type #{type.inspect}"
         end
-      end
-
-    private
-
-      def setup_connect_callbacks(conn, f)
-        conn.callback do
-          @connection = conn
-          f.resume conn
-        end
-
-        conn.errback do
-          @connection = conn
-          f.resume :refused
-        end
-
-        r = Fiber.yield
-        raise Errno::ECONNREFUSED if r == :refused
-        r
       end
     end
   end

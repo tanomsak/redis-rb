@@ -1,59 +1,108 @@
 # encoding: UTF-8
 
-require File.expand_path("./helper", File.dirname(__FILE__))
+require "helper"
 
-test "URL defaults to 127.0.0.1:6379" do
-  redis = Redis.connect
+class TestUrlParam < Test::Unit::TestCase
 
-  assert "127.0.0.1" == redis.client.host
-  assert 6379 == redis.client.port
-  assert 0 == redis.client.db
-  assert nil == redis.client.password
-end
+  include Helper::Client
 
-test "allows to pass in a URL" do
-  redis = Redis.connect :url => "redis://:secr3t@foo.com:999/2"
+  def test_url_defaults_to_______________
+    redis = Redis.new
 
-  assert "foo.com" == redis.client.host
-  assert 999 == redis.client.port
-  assert 2 == redis.client.db
-  assert "secr3t" == redis.client.password
-end
+    assert_equal "127.0.0.1", redis.client.host
+    assert_equal 6379, redis.client.port
+    assert_equal 0, redis.client.db
+    assert_equal nil, redis.client.password
+  end
 
-test "override URL if path option is passed" do
-  redis = Redis.connect :url => "redis://:secr3t@foo.com/foo:999/2", :path => "/tmp/redis.sock"
+  def test_allows_to_pass_in_a_url
+    redis = Redis.new :url => "redis://:secr3t@foo.com:999/2"
 
-  assert "/tmp/redis.sock" == redis.client.path
-  assert nil == redis.client.host
-  assert nil == redis.client.port
-end
+    assert_equal "foo.com", redis.client.host
+    assert_equal 999, redis.client.port
+    assert_equal 2, redis.client.db
+    assert_equal "secr3t", redis.client.password
+  end
 
-test "overrides URL if another connection option is passed" do
-  redis = Redis.connect :url => "redis://:secr3t@foo.com:999/2", :port => 1000
+  def test_allows_to_pass_in_a_url_with_string_key
+    redis = Redis.new "url" => "redis://:secr3t@foo.com:999/2"
 
-  assert "foo.com" == redis.client.host
-  assert 1000 == redis.client.port
-  assert 2 == redis.client.db
-  assert "secr3t" == redis.client.password
-end
+    assert_equal "foo.com", redis.client.host
+    assert_equal 999, redis.client.port
+    assert_equal 2, redis.client.db
+    assert_equal "secr3t", redis.client.password
+  end
 
-test "does not modify the passed options" do
-  options = { :url => "redis://:secr3t@foo.com:999/2" }
+  def test_override_url_if_path_option_is_passed
+    redis = Redis.new :url => "redis://:secr3t@foo.com/foo:999/2", :path => "/tmp/redis.sock"
 
-  Redis.connect(options)
+    assert_equal "/tmp/redis.sock", redis.client.path
+    assert_equal nil, redis.client.host
+    assert_equal nil, redis.client.port
+  end
 
-  assert({ :url => "redis://:secr3t@foo.com:999/2" } == options)
-end
+  def test_override_url_if_path_option_is_passed_with_string_key
+    redis = Redis.new :url => "redis://:secr3t@foo.com/foo:999/2", "path" => "/tmp/redis.sock"
 
-test "uses REDIS_URL over default if available" do
-  ENV["REDIS_URL"] = "redis://:secr3t@foo.com:999/2"
+    assert_equal "/tmp/redis.sock", redis.client.path
+    assert_equal nil, redis.client.host
+    assert_equal nil, redis.client.port
+  end
 
-  redis = Redis.connect
+  def test_overrides_url_if_another_connection_option_is_passed
+    redis = Redis.new :url => "redis://:secr3t@foo.com:999/2", :port => 1000
 
-  assert "foo.com" == redis.client.host
-  assert 999 == redis.client.port
-  assert 2 == redis.client.db
-  assert "secr3t" == redis.client.password
+    assert_equal "foo.com", redis.client.host
+    assert_equal 1000, redis.client.port
+    assert_equal 2, redis.client.db
+    assert_equal "secr3t", redis.client.password
+  end
 
-  ENV.delete("REDIS_URL")
+  def test_overrides_url_if_another_connection_option_is_passed_with_string_key
+    redis = Redis.new :url => "redis://:secr3t@foo.com:999/2", "port" => 1000
+
+    assert_equal "foo.com", redis.client.host
+    assert_equal 1000, redis.client.port
+    assert_equal 2, redis.client.db
+    assert_equal "secr3t", redis.client.password
+  end
+
+  def test_does_not_overrides_url_if_a_nil_option_is_passed
+    redis = Redis.new :url => "redis://:secr3t@foo.com:999/2", :port => nil
+
+    assert_equal "foo.com", redis.client.host
+    assert_equal 999, redis.client.port
+    assert_equal 2, redis.client.db
+    assert_equal "secr3t", redis.client.password
+  end
+
+  def test_does_not_overrides_url_if_a_nil_option_is_passed_with_string_key
+    redis = Redis.new :url => "redis://:secr3t@foo.com:999/2", "port" => nil
+
+    assert_equal "foo.com", redis.client.host
+    assert_equal 999, redis.client.port
+    assert_equal 2, redis.client.db
+    assert_equal "secr3t", redis.client.password
+  end
+
+  def test_does_not_modify_the_passed_options
+    options = { :url => "redis://:secr3t@foo.com:999/2" }
+
+    Redis.new(options)
+
+    assert({ :url => "redis://:secr3t@foo.com:999/2" } == options)
+  end
+
+  def test_uses_redis_url_over_default_if_available
+    ENV["REDIS_URL"] = "redis://:secr3t@foo.com:999/2"
+
+    redis = Redis.new
+
+    assert_equal "foo.com", redis.client.host
+    assert_equal 999, redis.client.port
+    assert_equal 2, redis.client.db
+    assert_equal "secr3t", redis.client.password
+
+    ENV.delete("REDIS_URL")
+  end
 end

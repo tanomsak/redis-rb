@@ -1,27 +1,41 @@
 # encoding: UTF-8
 
-require File.expand_path("./helper", File.dirname(__FILE__))
-require File.expand_path("./redis_mock", File.dirname(__FILE__))
+require "helper"
 
-include RedisMock::Helper
+class TestDistributedInternals < Test::Unit::TestCase
 
-require "redis/distributed"
+  include Helper::Distributed
 
-setup do
-  log = StringIO.new
-  [init(Redis::Distributed.new(NODES, :logger => ::Logger.new(log))), log]
-end
+  def test_provides_a_meaningful_inspect
+    nodes = ["redis://localhost:#{PORT}/15", *NODES]
+    redis = Redis::Distributed.new nodes
 
-$TEST_PIPELINING = false
-
-load File.expand_path("./lint/internals.rb", File.dirname(__FILE__))
-
-test "provides a meaningful inspect" do |r, _|
-  nodes = ["redis://localhost:#{PORT}/15", *NODES]
-  @r = Redis::Distributed.new nodes
-
-  node_info = nodes.map do |node|
-    "#{node} (Redis v#{@r.info.first["redis_version"]})"
+    assert_equal "#<Redis client v#{Redis::VERSION} for #{redis.nodes.map(&:id).join(', ')}>", redis.inspect
   end
-  assert "#<Redis client v#{Redis::VERSION} connected to #{node_info.join(', ')}>" == @r.inspect
+
+  def test_default_as_urls
+    nodes = ["redis://localhost:#{PORT}/15", *NODES]
+    redis = Redis::Distributed.new nodes
+    assert_equal ["redis://localhost:#{PORT}/15", *NODES], redis.nodes.map { |node| node.client.id}
+  end
+
+  def test_default_as_config_hashes
+    nodes = [OPTIONS.merge(:host => 'localhost'), OPTIONS.merge(:host => 'localhost', :port => PORT.next)]
+    redis = Redis::Distributed.new nodes
+    assert_equal ["redis://localhost:#{PORT}/15","redis://localhost:#{PORT.next}/15"], redis.nodes.map { |node| node.client.id }
+  end
+
+  def test_as_mix_and_match
+    nodes = ["redis://localhost:7389/15", OPTIONS.merge(:host => 'localhost'), OPTIONS.merge(:host => 'localhost', :port => PORT.next)]
+    redis = Redis::Distributed.new nodes
+    assert_equal ["redis://localhost:7389/15", "redis://localhost:#{PORT}/15", "redis://localhost:#{PORT.next}/15"], redis.nodes.map { |node| node.client.id }
+  end
+
+  def test_override_id
+    nodes = [OPTIONS.merge(:host => 'localhost', :id => "test"), OPTIONS.merge( :host => 'localhost', :port => PORT.next, :id => "test1")]
+    redis = Redis::Distributed.new nodes
+    assert_equal redis.nodes.first.client.id, "test"
+    assert_equal redis.nodes.last.client.id,  "test1"
+    assert_equal "#<Redis client v#{Redis::VERSION} for #{redis.nodes.map(&:id).join(', ')}>", redis.inspect
+  end
 end

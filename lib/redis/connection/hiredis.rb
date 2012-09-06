@@ -6,12 +6,29 @@ require "timeout"
 class Redis
   module Connection
     class Hiredis
-      def initialize
-        @connection = ::Hiredis::Connection.new
+
+      def self.connect(config)
+        connection = ::Hiredis::Connection.new
+
+        if config[:scheme] == "unix"
+          connection.connect_unix(config[:path], Integer(config[:timeout] * 1_000_000))
+        else
+          connection.connect(config[:host], config[:port], Integer(config[:timeout] * 1_000_000))
+        end
+
+        instance = new(connection)
+        instance.timeout = config[:timeout]
+        instance
+      rescue Errno::ETIMEDOUT
+        raise TimeoutError
+      end
+
+      def initialize(connection)
+        @connection = connection
       end
 
       def connected?
-        @connection.connected?
+        @connection && @connection.connected?
       end
 
       def timeout=(timeout)
@@ -19,20 +36,9 @@ class Redis
         @connection.timeout = Integer(timeout * 1_000_000)
       end
 
-      def connect(uri, timeout)
-        @connection.connect(uri.host, uri.port, Integer(timeout * 1_000_000))
-      rescue Errno::ETIMEDOUT
-        raise TimeoutError
-      end
-
-      def connect_unix(path, timeout)
-        @connection.connect_unix(path, Integer(timeout * 1_000_000))
-      rescue Errno::ETIMEDOUT
-        raise TimeoutError
-      end
-
       def disconnect
         @connection.disconnect
+        @connection = nil
       end
 
       def write(command)

@@ -79,22 +79,26 @@ class Redis
         end
       end
 
-      class UNIXSocket < ::UNIXSocket
+      if defined?(::UNIXSocket)
 
-        # This class doesn't include the mixin, because JRuby raises
-        # Errno::EAGAIN on #read_nonblock even when IO.select says it is
-        # readable. This behavior shows in 1.6.6 in both 1.8 and 1.9 mode.
-        # Therefore, fall back on the default Unix socket implementation,
-        # without timeouts.
+        class UNIXSocket < ::UNIXSocket
 
-        def self.connect(path, timeout)
-          Timeout.timeout(timeout) do
-            sock = new(path)
-            sock
+          # This class doesn't include the mixin, because JRuby raises
+          # Errno::EAGAIN on #read_nonblock even when IO.select says it is
+          # readable. This behavior shows in 1.6.6 in both 1.8 and 1.9 mode.
+          # Therefore, fall back on the default Unix socket implementation,
+          # without timeouts.
+
+          def self.connect(path, timeout)
+            Timeout.timeout(timeout) do
+              sock = new(path)
+              sock
+            end
+          rescue Timeout::Error
+            raise TimeoutError
           end
-        rescue Timeout::Error
-          raise TimeoutError
         end
+
       end
 
     else
@@ -163,20 +167,52 @@ class Redis
       DOLLAR   = "$".freeze
       ASTERISK = "*".freeze
 
-      def initialize
-        @sock = nil
+      def self.connect(config)
+        if config[:scheme] == "unix"
+          sock = UNIXSocket.connect(config[:path], config[:timeout])
+        else
+          sock = TCPSocket.connect(config[:host], config[:port], config[:timeout])
+        end
+
+        instance = new(sock)
+        instance.timeout = config[:timeout]
+        instance.set_tcp_keepalive config[:tcp_keepalive]
+        instance
+      end
+
+      if [:SOL_SOCKET, :SO_KEEPALIVE, :SOL_TCP, :TCP_KEEPIDLE, :TCP_KEEPINTVL, :TCP_KEEPCNT].all?{|c| Socket.const_defined? c}
+        def set_tcp_keepalive(keepalive)
+          return unless keepalive.is_a?(Hash)
+
+          @sock.setsockopt(Socket::SOL_SOCKET, Socket::SO_KEEPALIVE,  true)
+          @sock.setsockopt(Socket::SOL_TCP,    Socket::TCP_KEEPIDLE,  keepalive[:time])
+          @sock.setsockopt(Socket::SOL_TCP,    Socket::TCP_KEEPINTVL, keepalive[:intvl])
+          @sock.setsockopt(Socket::SOL_TCP,    Socket::TCP_KEEPCNT,   keepalive[:probes])
+        end
+
+        def get_tcp_keepalive
+          {
+            :time   => @sock.getsockopt(Socket::SOL_TCP, Socket::TCP_KEEPIDLE).int,
+            :intvl  => @sock.getsockopt(Socket::SOL_TCP, Socket::TCP_KEEPINTVL).int,
+            :probes => @sock.getsockopt(Socket::SOL_TCP, Socket::TCP_KEEPCNT).int,
+          }
+        end
+      else
+        def set_tcp_keepalive(keepalive)
+        end
+
+        def get_tcp_keepalive
+          {
+          }
+        end
+      end
+
+      def initialize(sock)
+        @sock = sock
       end
 
       def connected?
         !! @sock
-      end
-
-      def connect(uri, timeout)
-        @sock = TCPSocket.connect(uri.host, uri.port, timeout)
-      end
-
-      def connect_unix(path, timeout)
-        @sock = UNIXSocket.connect(path, timeout)
       end
 
       def disconnect
