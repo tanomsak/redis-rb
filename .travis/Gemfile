@@ -9,3 +9,5 @@ when "synchrony"
   gem "hiredis"
   gem "em-synchrony"
 end
+
+gem "connection_pool"
