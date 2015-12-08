@@ -275,6 +275,7 @@ class Redis
         if connected?
           if Process.pid != @pid
             # if options[:auto_reconnect]
+              # just reconnect
               reconnect
               return 
             # end
